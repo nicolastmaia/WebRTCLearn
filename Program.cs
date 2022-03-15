@@ -1,12 +1,6 @@
-﻿using System;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Net;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
-using SIPSorceryMedia.Encoders;
 using WebSocketSharp.Server;
 
 namespace WebRtcLearn
@@ -47,7 +41,7 @@ namespace WebRtcLearn
             Buffer.BlockCopy(completeAudioBuffer, bufferPosition, destBuffer, 0, bufferSize);
         }
 
-        private static void onConnected(AudioExtrasSource audioSource)
+        private static void SendAudio(AudioExtrasSource audioSource)
         {
             int i = 0;
 
@@ -67,6 +61,7 @@ namespace WebRtcLearn
             flipStream = !flipStream;
 
         }
+
         private static Task<RTCPeerConnection> CreatePeerConnection()
         {
             var pc = new RTCPeerConnection(null);
@@ -87,7 +82,7 @@ namespace WebRtcLearn
                 switch (state)
                 {
                     case RTCPeerConnectionState.connected:
-                        onConnected(audioSource);
+                        SendAudio(audioSource);
                         break;
                     case RTCPeerConnectionState.failed:
                         pc.Close("ice disconnection");
