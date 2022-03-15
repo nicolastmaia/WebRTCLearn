@@ -13,9 +13,11 @@ namespace WebRtcLearn
 
         private static int numberOfChunks = 25;
         private static int chunkLength = completeAudioBuffer.Length / numberOfChunks;
+        private static int restChunkLength = completeAudioBuffer.Length % numberOfChunks;
 
         private static byte[] miniBuffer1 = new byte[chunkLength];
         private static byte[] miniBuffer2 = new byte[chunkLength];
+        private static byte[] restBuffer = new byte[restChunkLength];
 
         private static bool flipStream = false;
 
@@ -36,7 +38,7 @@ namespace WebRtcLearn
 
         }
 
-        private static void FillBuffer(int bufferPosition, int bufferSize, byte[] destBuffer)
+        private static void FillBuffer(byte[] destBuffer, int bufferPosition, int bufferSize)
         {
             Buffer.BlockCopy(completeAudioBuffer, bufferPosition, destBuffer, 0, bufferSize);
         }
@@ -49,12 +51,31 @@ namespace WebRtcLearn
 
             audioSource.OnSendFromAudioStreamComplete += () =>
             {
-                audioStream = new MemoryStream(flipStream == true ? miniBuffer2 : miniBuffer1);
-                audioSource.SendAudioFromStream(audioStream, SIPSorceryMedia.Abstractions.AudioSamplingRatesEnum.Rate16KHz);
+                if (i <= numberOfChunks)
+                {
+                    if (i == numberOfChunks)
+                    {
+                        audioStream = new MemoryStream(restBuffer);
+                    }
+                    else
+                    {
+                        audioStream = new MemoryStream(flipStream == true ? miniBuffer2 : miniBuffer1);
+                    }
 
-                FillBuffer(i * chunkLength, chunkLength, flipStream == true ? miniBuffer1 : miniBuffer2);
-                flipStream = !flipStream;
-                i++;
+                    audioSource.SendAudioFromStream(audioStream, SIPSorceryMedia.Abstractions.AudioSamplingRatesEnum.Rate16KHz);
+
+                    if (i == numberOfChunks - 1)
+                    {
+                        FillBuffer(restBuffer, i * chunkLength, restChunkLength);
+                    }
+                    else if (i < numberOfChunks)
+                    {
+                        FillBuffer(flipStream == true ? miniBuffer1 : miniBuffer2, i * chunkLength, chunkLength);
+                    }
+
+                    flipStream = !flipStream;
+                    i++;
+                }                 
             };
 
             audioSource.SendAudioFromStream(audioStream, SIPSorceryMedia.Abstractions.AudioSamplingRatesEnum.Rate16KHz);
