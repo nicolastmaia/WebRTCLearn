@@ -1,5 +1,4 @@
-﻿using System.Net;
-using SIPSorcery.Media;
+﻿using SIPSorcery.Media;
 using SIPSorcery.Net;
 using WebSocketSharp.Server;
 
@@ -7,8 +6,13 @@ namespace WebRtcLearn
 {
     class Program
     {
+
         private const int WEBSOCKET_PORT = 8081;
-        private const string TESTE_FILENAME = "G:\\nicolas.maia\\Downloads\\teste.WAV";
+
+        private const string TESTE_FILENAME = "G:\\nicolas.maia\\Downloads\\teste.WAV"; // your test file path
+        private static string certificatePath = "C:\\nicolas.maia\\Downloads\\websocket-test.pfx"; //your certificate path if using ssl
+        private static string certificatePassword = "123456";
+
         private static byte[] completeAudioBuffer = File.ReadAllBytes(TESTE_FILENAME);
 
         private static int numberOfChunks = 25;
@@ -25,17 +29,26 @@ namespace WebRtcLearn
         {
             Console.WriteLine("WebRTC Get Started");
 
+            var webSocketServer = new WebSocketServer(WEBSOCKET_PORT, false); // change to true for ssl.
+            var wssCertificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(certificatePath, certificatePassword);
+
+            if (webSocketServer.IsSecure)
+            {
+                webSocketServer.SslConfiguration.ServerCertificate = wssCertificate;
+                webSocketServer.SslConfiguration.CheckCertificateRevocation = false;
+                webSocketServer.SslConfiguration.EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12;
+            }
+
             // Start web socket.
             Console.WriteLine("Starting web socket server...");
-            var webSocketServer = new WebSocketServer(IPAddress.Any, WEBSOCKET_PORT);
             webSocketServer.AddWebSocketService<WebRTCWebSocketPeer>("/", (peer) => peer.CreatePeerConnection = () => CreatePeerConnection());
+
             webSocketServer.Start();
 
             Console.WriteLine($"Waiting for web socket connections on {webSocketServer.Address}:{webSocketServer.Port}...");
 
             Console.WriteLine("Press any key exit.");
             Console.ReadLine();
-
         }
 
         private static void FillBuffer(byte[] destBuffer, int bufferPosition, int bufferSize)
@@ -75,26 +88,55 @@ namespace WebRtcLearn
 
                     flipStream = !flipStream;
                     i++;
-                }                 
+                }
             };
 
             audioSource.SendAudioFromStream(audioStream, SIPSorceryMedia.Abstractions.AudioSamplingRatesEnum.Rate16KHz);
             flipStream = !flipStream;
-
         }
 
         private static Task<RTCPeerConnection> CreatePeerConnection()
         {
-            var pc = new RTCPeerConnection(null);
+            var config = new RTCConfiguration
+            {
+                iceServers = new List<RTCIceServer>()
+            };
+
+            config.iceServers.Add(new RTCIceServer { urls = "stun:stun.l.google.com:19302" });
+
+            var pc = new RTCPeerConnection(config);
 
             var audioSource = new AudioExtrasSource(new AudioEncoder());
-            var audioFormat = audioSource.GetAudioSourceFormats()[0];
-            audioSource.SetAudioSourceFormat(audioFormat);
+
             audioSource.AudioSamplePeriodMilliseconds = 20;
             MediaStreamTrack audioTrack = new MediaStreamTrack(audioSource.GetAudioSourceFormats(), MediaStreamStatusEnum.SendRecv);
             pc.addTrack(audioTrack);
 
+            pc.OnAudioFormatsNegotiated += (audioFormats) => audioSource.SetAudioSourceFormat(audioFormats.First());
+
             audioSource.OnAudioSourceEncodedSample += pc.SendAudio;
+
+            pc.onsignalingstatechange += () =>
+            {
+                Console.WriteLine("ice signaling state 1: " + pc.signalingState);
+            };
+
+            pc.onicegatheringstatechange += (state) =>
+            {
+                Console.WriteLine("ice gathering state 1: " + state);
+            };
+
+            pc.oniceconnectionstatechange += (state) =>
+            {
+                Console.WriteLine("ice connection state 1: " + state);
+            };
+
+            pc.onicecandidateerror += (state, s) =>
+            {
+                Console.WriteLine("ice connection state error: " + pc.iceConnectionState);
+                Console.WriteLine("ice candidate error state: " + state);
+                Console.WriteLine("ice candidate error string: " + s);
+            };
 
             pc.onconnectionstatechange += async (state) =>
             {
@@ -116,5 +158,6 @@ namespace WebRtcLearn
 
             return Task.FromResult(pc);
         }
+
     }
 }
